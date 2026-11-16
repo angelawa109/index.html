@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Holiday Season Coverage Dashboard</title>
+<style>
+  :root{
+    --bg:#f4f4f4; --surface:#fff; --border:#e0e0e0; --text:#161616; --muted:#525252;
+    --out:#da1e28; --hol:#8a3ffc; --hol-bg:#e8daff;
+    --ok:#198038; --ok-bg:#a7f0ba; --warn-bg:#fddc69; --lo-bg:#ffb784; --crit-bg:#ff8389;
+    --accent:#0f62fe;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:"IBM Plex Sans","Segoe UI",system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.5}
+  header{background:#161616;color:#fff;padding:24px 32px}
+  header h1{margin:0 0 4px;font-size:24px;font-weight:400}
+  header p{margin:0;color:#c6c6c6}
+  main{max-width:1400px;margin:0 auto;padding:24px 32px 48px}
+  .panel{background:var(--surface);border:1px solid var(--border);padding:16px}
+  .scroll{overflow-x:auto}
+  table.g{border-collapse:separate;border-spacing:0;font-size:12px}
+  table.g th,table.g td{border-right:1px solid #fff;border-bottom:1px solid #fff;text-align:center;padding:0;height:30px;min-width:38px}
+  table.g th{background:#f4f4f4;font-weight:600;color:var(--muted)}
+  table.g th.wk{border-bottom:1px solid var(--border);height:26px;color:var(--text);background:#e8e8e8}
+  table.g th.name,table.g td.name{position:sticky;left:0;z-index:2;text-align:left;padding:0 12px;min-width:170px;background:var(--surface);border-right:1px solid var(--border);font-weight:600}
+  table.g th.name{background:#f4f4f4}
+  table.g td.name.sub{font-weight:400;padding-left:24px}
+  table.g tr.grp td{background:#161616;color:#fff;text-align:left;padding:0 12px;font-weight:600;height:28px;border:0}
+  table.g tr.grp td.name{background:#161616;border-right:0}
+  td.c-ok{background:var(--ok-bg)}
+  td.c-out{background:var(--out);color:#fff;font-weight:700}
+  td.c-hol{background:var(--hol-bg);color:var(--hol);font-weight:600}
+  td.cov{font-weight:500;color:#161616;font-size:10px;line-height:1.3;padding:4px 0;vertical-align:top}
+  td.cov div{white-space:nowrap}
+  td.l4{background:var(--ok-bg)} td.l2{background:var(--warn-bg)} td.l1{background:var(--lo-bg)} td.l0{background:var(--crit-bg)}
+  td.hol-cov{background:var(--hol-bg);color:var(--hol)}
+  td.covname{background:#f4f4f4 !important}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;font-size:12px;color:var(--muted)}
+  .legend span::before{content:"";display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:-2px;border:1px solid var(--border)}
+  .lg-ok::before{background:var(--ok-bg)} .lg-out::before{background:var(--out)} .lg-hol::before{background:var(--hol-bg)}
+  .lg-c4::before{background:var(--ok-bg)} .lg-c2::before{background:var(--warn-bg)} .lg-c1::before{background:var(--lo-bg)} .lg-c0::before{background:var(--crit-bg)}
+  .note{color:var(--muted);font-size:12px;margin-top:12px}
+  footer{text-align:center;color:var(--muted);font-size:12px;padding:16px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Holiday Season Coverage Dashboard</h1>
+  <p id="range"></p>
+</header>
+<main>
+  <div class="panel">
+    <div class="scroll"><table class="g" id="grid"></table></div>
+    <div class="legend">
+      <span class="lg-ok">Available</span><span class="lg-out">Out (O)</span><span class="lg-hol">IBM holiday (H)</span>
+      <span class="lg-c4">Full group working</span><span class="lg-c2">Someone out, 2+ still working</span><span class="lg-c1">Only 1 person working</span><span class="lg-c0">Nobody working</span>
+    </div>
+  </div>
+</main>
+<footer>Made with IBM Bob</footer>
+
+<script>
+(function(){
+  var YEAR = 2026;
+  var GROUPS = [
+    {name:"Hands on keyboard", members:["Angel","Elliot","Adele","Mat","Girish"]},
+    {name:"Project management", members:["OJ","Angela"]}
+  ];
+  // Absences from "Vacay Days.docx": [startMonth, startDay, endMonth, endDay]
+  var OUT = {
+    "Angel":  [[11,16,11,17],[11,25,11,25],[11,30,12,4],[12,28,12,31]],
+    "Elliot": [[11,20,11,20],[11,25,11,25],[12,24,12,24],[12,28,12,31]],
+    "Adele":  [[11,25,11,25],[12,31,12,31]],
+    "Mat":    [[11,16,11,20],[12,24,12,24],[12,28,12,31]],
+    "Girish": [],
+    "OJ":     [],
+    "Angela": [[11,30,11,30],[12,24,12,24],[12,28,12,31]]
+  };
+  var HOLIDAYS = {"11-26":"Thanksgiving holiday","11-27":"Thanksgiving holiday","12-25":"Christmas holiday","1-1":"New Year's Day holiday"};
+  var START = new Date(YEAR,10,16), END = new Date(YEAR+1,0,1);
+  var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+  function key(d){return (d.getMonth()+1)+"-"+d.getDate();}
+  function fmt(d){return DOW[d.getDay()]+" "+MON[d.getMonth()]+" "+d.getDate();}
+  function fmtShort(d){return MON[d.getMonth()]+" "+d.getDate();}
+  function isOut(p,d){
+    var v=(d.getMonth()+1)*100+d.getDate();
+    return OUT[p].some(function(r){return v>=r[0]*100+r[1] && v<=r[2]*100+r[3];});
+  }
+  function el(t,c,h){var e=document.createElement(t); if(c)e.className=c; if(h!==undefined)e.innerHTML=h; return e;}
+  function lvl(avail,total){return avail===total?"l4":avail>=2?"l2":avail===1?"l1":"l0";}
+
+  var today=new Date(); today=new Date(today.getFullYear(),today.getMonth(),today.getDate());
+  function isToday(x){return x.getTime()===today.getTime();}
+
+  // Weekdays only
+  var cal=[], d=new Date(START);
+  while(d<=END){
+    if(d.getDay()!==0&&d.getDay()!==6) cal.push(new Date(d));
+    d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1);
+  }
+  var total=GROUPS.reduce(function(a,g){return a+g.members.length;},0);
+  document.getElementById("range").textContent =
+    "Team of "+total+" \u2022 "+fmt(START)+" \u2013 "+fmt(END)+", "+END.getFullYear();
+
+  var weeks=[]; cal.forEach(function(x){
+    var s=new Date(x); s.setDate(s.getDate()-(s.getDay()+6)%7);
+    var w=weeks[weeks.length-1];
+    if(!w||w.k!==s.getTime()){w={k:s.getTime(),start:s,n:0};weeks.push(w);} w.n++;
+  });
+
+  var g=document.getElementById("grid");
+  var h1=el("tr"); h1.appendChild(el("th","name",""));
+  weeks.forEach(function(w){var th=el("th","wk","Week of "+fmtShort(w.start));th.colSpan=w.n;h1.appendChild(th);});
+  g.appendChild(h1);
+  var h2=el("tr"); h2.appendChild(el("th","name","Team member"));
+  cal.forEach(function(x){h2.appendChild(el("th",isToday(x)?"today":"",DOW[x.getDay()].charAt(0)+"<br>"+x.getDate()));});
+  g.appendChild(h2);
+
+  GROUPS.forEach(function(grp){
+    var gr=el("tr","grp"); var gt=el("td","name",grp.name+" ("+grp.members.length+")"); gr.appendChild(gt);
+    var fill=el("td"); fill.colSpan=cal.length; gr.appendChild(fill); g.appendChild(gr);
+
+    grp.members.forEach(function(p){
+      var tr=el("tr"); tr.appendChild(el("td","name sub",p));
+      cal.forEach(function(x){
+        var td, hol=HOLIDAYS[key(x)];
+        if(hol){td=el("td","c-hol","H");td.title=p+" \u2013 "+hol;}
+        else if(isOut(p,x)){td=el("td","c-out","O");td.title=p+" \u2013 Out on "+fmt(x);}
+        else{td=el("td","c-ok","");td.title=p+" \u2013 Available on "+fmt(x);}
+        if(isToday(x))td.className+=" today";
+        tr.appendChild(td);
+      });
+      g.appendChild(tr);
+    });
+
+    var cr=el("tr"); cr.appendChild(el("td","name covname","Available backups (of "+grp.members.length+")"));
+    cal.forEach(function(x){
+      var td, hol=HOLIDAYS[key(x)];
+      if(hol){td=el("td","cov hol-cov","H");td.title=hol;}
+      else{
+        var outs=grp.members.filter(function(p){return isOut(p,x);});
+        var av=grp.members.length-outs.length;
+        td=el("td","cov "+lvl(av,grp.members.length),outs.length===0?"":grp.members.filter(function(p){return outs.indexOf(p)<0;}).map(function(p){return "<div>"+p+"</div>";}).join(""));
+        td.title=fmt(x)+" \u2013 "+grp.name+": "+av+" of "+grp.members.length+" available"+(outs.length?" (out: "+outs.join(", ")+")":"");
+      }
+      if(isToday(x))td.className+=" today";
+      cr.appendChild(td);
+    });
+    g.appendChild(cr);
+  });
+})();
+</script>
+</body>
+</html>
