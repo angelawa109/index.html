@@ -30,6 +30,7 @@
   table.g tr.grp td.name{background:#161616;border-right:0}
   td.c-ok{background:var(--ok-bg)}
   td.c-out{background:var(--out);color:#fff;font-weight:700}
+  td.c-half{background:#ffd7d9;color:var(--out);font-weight:700}
   td.c-hol{background:var(--hol-bg);color:var(--hol);font-weight:600}
   td.cov{font-weight:500;color:#161616;font-size:10px;line-height:1.3;padding:4px 0;vertical-align:top}
   td.cov div{white-space:nowrap}
@@ -38,7 +39,7 @@
   td.covname{background:#f4f4f4 !important}
   .legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;font-size:12px;color:var(--muted)}
   .legend span::before{content:"";display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:-2px;border:1px solid var(--border)}
-  .lg-ok::before{background:var(--ok-bg)} .lg-out::before{background:var(--out)} .lg-hol::before{background:var(--hol-bg)}
+  .lg-ok::before{background:var(--ok-bg)} .lg-out::before{background:var(--out)} .lg-half::before{background:#ffd7d9} .lg-hol::before{background:var(--hol-bg)}
   .lg-c4::before{background:var(--ok-bg)} .lg-c2::before{background:var(--warn-bg)} .lg-c1::before{background:var(--lo-bg)} .lg-c0::before{background:var(--crit-bg)}
   .note{color:var(--muted);font-size:12px;margin-top:12px}
   footer{text-align:center;color:var(--muted);font-size:12px;padding:16px}
@@ -53,8 +54,8 @@
   <div class="panel">
     <div class="scroll"><table class="g" id="grid"></table></div>
     <div class="legend">
-      <span class="lg-ok">Available</span><span class="lg-out">Out (O)</span><span class="lg-hol">IBM holiday (H)</span>
-      <span class="lg-c4">Full group working</span><span class="lg-c2">Someone out, 2+ still working</span><span class="lg-c1">Only 1 person working</span><span class="lg-c0">Nobody working</span>
+      <span class="lg-ok">Available</span><span class="lg-out">Out (O)</span><span class="lg-half">Half day off (&frac12;)</span><span class="lg-hol">IBM holiday (H)</span>
+      <span class="lg-c4">Full group working</span><span class="lg-c2">Someone out or half day, 2+ still working</span><span class="lg-c1">Only 1 person working</span><span class="lg-c0">Nobody working</span>
     </div>
   </div>
 </main>
@@ -75,7 +76,11 @@
     "Mat":    [[11,16,11,20],[12,24,12,24],[12,28,12,31]],
     "Girish": [],
     "OJ":     [],
-    "Angela": [[11,30,11,30],[12,24,12,24],[12,28,12,31]]
+    "Angela": [[12,24,12,24],[12,28,12,31]]
+  };
+  // Half days off (still counted as available): [month, day]
+  var HALF = {
+    "Angela": [[11,30],[12,11]]
   };
   var HOLIDAYS = {"11-26":"Thanksgiving holiday","11-27":"Thanksgiving holiday","12-25":"Christmas holiday","1-1":"New Year's Day holiday"};
   var START = new Date(YEAR,10,16), END = new Date(YEAR+1,0,1);
@@ -89,8 +94,11 @@
     var v=(d.getMonth()+1)*100+d.getDate();
     return OUT[p].some(function(r){return v>=r[0]*100+r[1] && v<=r[2]*100+r[3];});
   }
+  function isHalf(p,d){
+    return (HALF[p]||[]).some(function(r){return r[0]===d.getMonth()+1 && r[1]===d.getDate();});
+  }
   function el(t,c,h){var e=document.createElement(t); if(c)e.className=c; if(h!==undefined)e.innerHTML=h; return e;}
-  function lvl(avail,total){return avail===total?"l4":avail>=2?"l2":avail===1?"l1":"l0";}
+  function lvl(avail,total,halves){return avail===total?(halves?"l2":"l4"):avail>=2?"l2":avail===1?"l1":"l0";}
 
   var today=new Date(); today=new Date(today.getFullYear(),today.getMonth(),today.getDate());
   function isToday(x){return x.getTime()===today.getTime();}
@@ -129,6 +137,7 @@
         var td, hol=HOLIDAYS[key(x)];
         if(hol){td=el("td","c-hol","H");td.title=p+" \u2013 "+hol;}
         else if(isOut(p,x)){td=el("td","c-out","O");td.title=p+" \u2013 Out on "+fmt(x);}
+        else if(isHalf(p,x)){td=el("td","c-half","\u00bd");td.title=p+" \u2013 Half day off on "+fmt(x);}
         else{td=el("td","c-ok","");td.title=p+" \u2013 Available on "+fmt(x);}
         if(isToday(x))td.className+=" today";
         tr.appendChild(td);
@@ -142,9 +151,11 @@
       if(hol){td=el("td","cov hol-cov","H");td.title=hol;}
       else{
         var outs=grp.members.filter(function(p){return isOut(p,x);});
+        var halves=grp.members.filter(function(p){return !isOut(p,x)&&isHalf(p,x);});
         var av=grp.members.length-outs.length;
-        td=el("td","cov "+lvl(av,grp.members.length),outs.length===0?"":grp.members.filter(function(p){return outs.indexOf(p)<0;}).map(function(p){return "<div>"+p+"</div>";}).join(""));
-        td.title=fmt(x)+" \u2013 "+grp.name+": "+av+" of "+grp.members.length+" available"+(outs.length?" (out: "+outs.join(", ")+")":"");
+        var names=grp.members.filter(function(p){return outs.indexOf(p)<0;}).map(function(p){return "<div>"+p+(halves.indexOf(p)>=0?" \u00bd":"")+"</div>";}).join("");
+        td=el("td","cov "+lvl(av,grp.members.length,halves.length),(outs.length||halves.length)?names:"");
+        td.title=fmt(x)+" \u2013 "+grp.name+": "+av+" of "+grp.members.length+" available"+(outs.length?" (out: "+outs.join(", ")+")":"")+(halves.length?" (half day: "+halves.join(", ")+")":"");
       }
       if(isToday(x))td.className+=" today";
       cr.appendChild(td);
